@@ -1,7 +1,7 @@
 import cv2
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 
 class NumberPlateApp:
@@ -11,28 +11,40 @@ class NumberPlateApp:
 
         self.file_path = None
         self.selected_photo = None  # Store PhotoImage for selected image
-        self.processed_photo = None  # Store PhotoImage for processed image
+        self.processed_image = None  # Store processed image
+        self.processed_photo = None  # Store PhotoImage for processed image preview
+        self.crop_coordinates = None  # Store crop coordinates
+
+        # Maximum size for the preview images
+        self.max_preview_size = (400, 300)
 
         # Create labels
-        self.label_selected = tk.Label(root, text="Selected Image:")
+        self.label_selected = ttk.Label(root, text="Selected Image:")
         self.label_selected.pack(pady=5)
 
-        self.label_selected_image = tk.Label(root)
+        self.label_selected_image = ttk.Label(root)
         self.label_selected_image.pack(pady=10)
 
-        self.label_processed = tk.Label(root, text="Processed Image:")
+        self.label_processed = ttk.Label(root, text="Processed Image:")
         self.label_processed.pack(pady=5)
 
         # Create buttons
-        self.select_button = tk.Button(root, text="Select File", command=self.select_file)
+        self.select_button = ttk.Button(root, text="Select File", command=self.select_file)
         self.select_button.pack(pady=5)
 
-        self.process_button = tk.Button(root, text="Process File", command=self.process_file)
+        self.process_button = ttk.Button(root, text="Process File", command=self.process_file)
         self.process_button.pack(pady=10)
 
+        self.download_button = ttk.Button(root, text="Download Processed Image", command=self.download_processed_image, state="disabled")
+        self.download_button.pack(pady=10)
+
         # Create image preview label for processed image
-        self.image_label_processed = tk.Label(root)
+        self.image_label_processed = ttk.Label(root)
         self.image_label_processed.pack(pady=10)
+
+        # Create progress bar
+        self.progress_bar = ttk.Progressbar(root, mode="indeterminate", length=300)
+        self.progress_bar.pack(pady=10)
 
     def select_file(self):
         self.file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
@@ -43,44 +55,58 @@ class NumberPlateApp:
     def show_selected_image(self):
         # Load and display the selected image in the Tkinter label
         selected_image = Image.open(self.file_path)
-        selected_image = selected_image.resize((400, 300), Image.LANCZOS)
+        selected_image.thumbnail(self.max_preview_size, Image.LANCZOS)
         self.selected_photo = ImageTk.PhotoImage(selected_image)
 
         self.label_selected_image.configure(image=self.selected_photo)
         self.label_selected_image.image = self.selected_photo
 
-    def show_processed_image(self, processed_file_path):
-        # Load and display the processed image in the Tkinter label
-        processed_image = Image.open(processed_file_path)
-        processed_image = processed_image.resize((400, 300), Image.LANCZOS)
-        self.processed_photo = ImageTk.PhotoImage(processed_image)
+    def show_processed_image(self, processed_image, crop_coordinates):
+        # Crop the processed image
+        cropped_image = processed_image.crop(crop_coordinates)
+
+        # Display the cropped processed image in the Tkinter label for preview
+        cropped_image.thumbnail(self.max_preview_size, Image.LANCZOS)
+        self.processed_photo = ImageTk.PhotoImage(cropped_image)
 
         self.image_label_processed.configure(image=self.processed_photo)
         self.image_label_processed.image = self.processed_photo
 
+        # Enable the download button
+        self.download_button["state"] = "normal"
+
     def process_file(self):
         if self.file_path:
-            # Specify the path to the directory for saving processed files
-            output_directory_path = os.path.join('C:\\Users\\Geo Thomas\\OneDrive\\Desktop\\kevin\\New folder (2)', 'DETECTED_AND_CROPPED_FILES')
-            print(f"Output directory: {output_directory_path}")
+            # Disable buttons during processing
+            self.select_button["state"] = "disabled"
+            self.process_button["state"] = "disabled"
+            self.download_button["state"] = "disabled"
 
-            # Ensure the output directory exists
-            os.makedirs(output_directory_path, exist_ok=True)
+            # Show progress bar
+            self.progress_bar.start()
 
             try:
                 # Detect and crop number plates in the file
-                processed_file_path = self.detect_and_crop_number_plate(self.file_path, output_directory_path)
+                self.processed_image, self.crop_coordinates = self.detect_and_crop_number_plate(self.file_path)
 
-                # Display the processed image
-                self.show_processed_image(processed_file_path)
+                # Display the processed image for preview
+                self.show_processed_image(self.processed_image, self.crop_coordinates)
 
                 messagebox.showinfo("Success", "Number plate detection and cropping completed!")
-                print(f"Processed file saved at: {processed_file_path}")
 
             except ValueError as e:
                 messagebox.showerror("Error", str(e))
 
-    def detect_and_crop_number_plate(self, input_path, output_path):
+            finally:
+                # Enable buttons after processing
+                self.select_button["state"] = "normal"
+                self.process_button["state"] = "normal"
+
+                # Stop and hide progress bar
+                self.progress_bar.stop()
+                self.progress_bar.pack_forget()
+
+    def detect_and_crop_number_plate(self, input_path):
         # Load the image
         img = cv2.imread(input_path)
 
@@ -105,11 +131,21 @@ class NumberPlateApp:
             x, y, w, h = cv2.boundingRect(contour)
             cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-        # Save the modified image with rectangles drawn around number plates
-        output_filename = os.path.join(output_path, os.path.basename(input_path))
-        cv2.imwrite(output_filename, img)
+        # Return the processed image and crop coordinates
+        return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)), (x, y, x + w, y + h)
 
-        return output_filename
+    def download_processed_image(self):
+        if self.processed_image and self.crop_coordinates:
+            # Get the processed image filename
+            processed_filename = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG files", "*.png")])
+
+            if processed_filename:
+                # Crop the processed image before saving
+                cropped_image = self.processed_image.crop(self.crop_coordinates)
+                cropped_image.save(processed_filename)
+                messagebox.showinfo("Download Complete", "Cropped processed image downloaded successfully.")
+            else:
+                messagebox.showinfo("Download Canceled", "Download operation canceled.")
 
 if __name__ == "__main__":
     root = tk.Tk()
