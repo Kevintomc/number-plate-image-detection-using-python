@@ -1,0 +1,7 @@
+pip install opencv-python
+pip install Pillow
+
+
+
+pip install opencv-python
+pip install Pillow
