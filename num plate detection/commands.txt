@@ -12,3 +12,5 @@ pip install tkinter
 python -m tkinter
 
 sudo apt-get install python3-tk
+pip install opencv-python Pillow
+
