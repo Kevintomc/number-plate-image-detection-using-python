@@ -9,4 +9,6 @@ pip install Pillow
 pip install tk
 
 pip install tkinter
+python -m tkinter
 
+sudo apt-get install python3-tk
